@@ -90,6 +90,25 @@ public final class Polyhedron {
         int x=Math.abs(p.x),y=Math.abs(p.y),z=Math.abs(p.z);
         return y>=x && y>=z ? 1 : x>=z ? 0 : 2;
     }
+    /**
+     * True when the hull owns a face parallel to {@code axis}/{@code positive} that lies exactly on that
+     * side of the block (plane offset 16 or 0 in sixteenths). Connected-texture code uses this to decide
+     * whether the copied material is actually presented on that side, i.e. whether this block may claim
+     * the material as its appearance and whether neighbours behind that side should count. Slanted faces
+     * never qualify, even when they touch the border along an edge.
+     */
+    public boolean faceAtBoundary(int axis,boolean positive) {
+        for(Face face:faces) {
+            int nx=face.plane().x(),ny=face.plane().y(),nz=face.plane().z();
+            int others=axis==0 ? Math.abs(ny)+Math.abs(nz) : axis==1 ? Math.abs(nx)+Math.abs(nz) : Math.abs(nx)+Math.abs(ny);
+            if(others!=0) continue;
+            int normal=axis==0 ? nx : axis==1 ? ny : nz;
+            if((normal>0)!=positive) continue;
+            if(face.plane().d()!=(positive ? 16 : 0)) continue;
+            return true;
+        }
+        return false;
+    }
     private static int u(Point p,int axis) { return axis==0 ? p.z : p.x; }
     private static int v(Point p,int axis) { return axis==1 ? p.z : p.y; }
     private static long cross(Point a,Point b,Point c,int axis) {

@@ -5,6 +5,7 @@ import com.caca.copypoly.geometry.Polyhedron;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.decoration.copycat.CopycatModel;
+import com.simibubi.create.content.decoration.copycat.FilteredBlockAndTintGetter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.*;
@@ -52,7 +53,12 @@ public class PolyModel extends BakedModelWrapper<BakedModel> {
         Polyhedron poly=data.get(PolyBlockEntity.GEOMETRY);
         if(poly==null) poly=Polyhedron.CUBE;
         BakedModel source=Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
-        ModelData sourceData=source.getModelData(world,pos,material,ModelData.EMPTY);
+        // Position-resampling route (LittleTiles style): no connected-tile data is taken from the material
+        // model at all. Every quad is re-sampled from the polygon's position inside the block (see
+        // projectFace), so the texture stays continuous across neighbouring polyhedra and real blocks by
+        // construction. Sealing the view to this block's own position keeps a CTModel on its plain tile.
+        FilteredBlockAndTintGetter sealed=new FilteredBlockAndTintGetter(world,pos::equals);
+        ModelData sourceData=source.getModelData(sealed,pos,material,ModelData.EMPTY);
         return data.derive().with(MESH,mesh(poly,material,source,sourceData,material.getSeed(pos))).build();
     }
     private Mesh mesh(Polyhedron poly,BlockState material,BakedModel source,ModelData data,long seed) {
@@ -140,6 +146,17 @@ public class PolyModel extends BakedModelWrapper<BakedModel> {
         }
         return out;
     }
+    /**
+     * Re-samples the material quad onto one polyhedron face by position (LittleTiles' VectorFan rule,
+     * written for an arbitrary face plane): the polygon vertex is projected into the quad's own (a,b)
+     * plane, the offset from the quad's first vertex is turned into a UV offset with the quad's own UV
+     * density (s/tv below), and the polygon is clamped to the quad's bounds first.
+     * <p>
+     * For a full-block face this degenerates to "sample the texture where this piece of geometry sits",
+     * which is what keeps a wall of polyhedra and the real blocks next to it seamless; for inset models
+     * (panes, torches) the clamp keeps the texture at its true density instead of stretching it.
+     * No connected-tile data is involved: the UVs describe position, not a connection state.
+     */
     private static void projectFace(List<BakedQuad> output,Polyhedron.Face face,BakedQuad source,Direction dir) {
         int[] src=source.getVertices();int stride=src.length/4;
         Vec3 p0=vertex(src,stride,0),p1=vertex(src,stride,1),p3=vertex(src,stride,3);
