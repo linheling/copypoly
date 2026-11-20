@@ -65,16 +65,14 @@ public class PolyBlock extends CopycatBlock {
         return be.poly().faceAtBoundary(axis(side), side.getAxisDirection() == Direction.AxisDirection.POSITIVE);
     }
     /**
-     * The material model's connected-texture pass asks this for every neighbour it wants to look at.
+     * The material model's connected-texture pass asks this for every position it wants to look at.
      * Only sides where the hull actually shows a face on the block border count, so a partial hull does
-     * not pick up connections it has no geometry for.
+     * not pick up connections it has no geometry for. Diagonal offsets are allowed on purpose: corner
+     * tiles are probed at {@code pos.relative(a).relative(b)} and would otherwise always read as air.
      */
     @Override public boolean canConnectTexturesToward(BlockAndTintGetter world, BlockPos from, BlockPos to, BlockState state) {
         int dx = to.getX() - from.getX(), dy = to.getY() - from.getY(), dz = to.getZ() - from.getZ();
-        if (dx == 0 && dy == 0 && dz == 0) return true; // own position: keeps the block itself visible to the query
-        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) != 1) return false;
-        Direction side = Direction.fromDelta(dx, dy, dz);
-        return side != null && world.getBlockEntity(from) instanceof PolyBlockEntity be && boundary(be, side);
+        return world.getBlockEntity(from) instanceof PolyBlockEntity be && be.poly().showsOffset(dx, dy, dz);
     }
     /**
      * Drives {@link CopycatBlock#getAppearance}: returning {@code false} makes this block report the

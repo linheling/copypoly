@@ -109,6 +109,22 @@ public final class Polyhedron {
         }
         return false;
     }
+    /**
+     * Whether a connected-texture probe at this block offset should see the real world. Every axis the
+     * offset moves along must be a side where the hull presents a boundary face, so a probe towards a side
+     * the hull does not fill reads as air (no connection invented). Corners matter here: Create's
+     * {@code buildContext} probes corner bits at {@code pos.relative(horizontal, +-1).relative(vertical, +-1)},
+     * i.e. two axes at once, and Fusion/Continuity look up to two blocks out. Rejecting anything but
+     * single-axis offsets leaves every corner bit permanently false - "edges connect, corners do not".
+     */
+    public boolean showsOffset(int dx,int dy,int dz) {
+        if(dx==0 && dy==0 && dz==0) return true; // the block itself stays visible to the query
+        if(Math.abs(dx)>2 || Math.abs(dy)>2 || Math.abs(dz)>2) return false;
+        if(dx!=0 && !faceAtBoundary(0,dx>0)) return false;
+        if(dy!=0 && !faceAtBoundary(1,dy>0)) return false;
+        if(dz!=0 && !faceAtBoundary(2,dz>0)) return false;
+        return true;
+    }
     private static int u(Point p,int axis) { return axis==0 ? p.z : p.x; }
     private static int v(Point p,int axis) { return axis==1 ? p.z : p.y; }
     private static long cross(Point a,Point b,Point c,int axis) {

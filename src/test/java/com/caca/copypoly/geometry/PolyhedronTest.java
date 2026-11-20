@@ -60,6 +60,26 @@ class PolyhedronTest {
             verifyCoverage(h,random);
         }
     }
+    @Test void showsOffsetAllowsCornersOnlyWhereTheHullFillsTheBorder() {
+        assertTrue(Polyhedron.CUBE.showsOffset(0,0,0));
+        assertTrue(Polyhedron.CUBE.showsOffset(1,0,0));
+        assertTrue(Polyhedron.CUBE.showsOffset(0,1,0));
+        assertTrue(Polyhedron.CUBE.showsOffset(1,0,-1));   // corner of a horizontal face
+        assertTrue(Polyhedron.CUBE.showsOffset(1,1,1));
+        assertTrue(Polyhedron.CUBE.showsOffset(2,0,0));    // front-of-face / inner seam lookups
+        assertFalse(Polyhedron.CUBE.showsOffset(3,0,0));
+        var half=hull("0,0,0;0,0,16;0,16,0;0,16,16;8,0,0;8,0,16;8,16,0;8,16,16");
+        assertTrue(half.showsOffset(-1,0,0));
+        assertFalse(half.showsOffset(1,0,0));
+        assertFalse(half.showsOffset(1,0,1));
+        assertTrue(half.showsOffset(-1,0,1));
+        assertTrue(half.showsOffset(0,1,0));
+        var tetra=hull("0,0,0;16,0,0;0,16,0;0,0,16");
+        assertTrue(tetra.showsOffset(0,-1,0));
+        assertFalse(tetra.showsOffset(0,1,0));
+        assertTrue(tetra.showsOffset(-1,-1,0));
+        assertFalse(tetra.showsOffset(1,-1,0));
+    }
     @Test void faceAtBoundaryOnlyReportsSidesTheHullPresents() {
         for(int axis=0;axis<3;axis++) {
             assertTrue(Polyhedron.CUBE.faceAtBoundary(axis,true));
