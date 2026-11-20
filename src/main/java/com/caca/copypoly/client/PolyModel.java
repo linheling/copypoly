@@ -5,6 +5,7 @@ import com.caca.copypoly.geometry.Polyhedron;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.decoration.copycat.CopycatModel;
+import com.simibubi.create.content.decoration.copycat.FilteredBlockAndTintGetter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.*;
@@ -52,7 +53,13 @@ public class PolyModel extends BakedModelWrapper<BakedModel> {
         Polyhedron poly=data.get(PolyBlockEntity.GEOMETRY);
         if(poly==null) poly=Polyhedron.CUBE;
         BakedModel source=Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
-        ModelData sourceData=source.getModelData(world,pos,material,ModelData.EMPTY);
+        // Connected textures: resolve the material model against a view that hides neighbours this hull
+        // has no face towards (see PolyBlock#canConnectTexturesToward). The polyhedron's own position stays
+        // visible so Create's CTModel can apply its CopycatBlock occlusion exemption to thin/slanted shapes.
+        BlockState self=state;
+        FilteredBlockAndTintGetter view=new FilteredBlockAndTintGetter(world,
+            p -> p.equals(pos) || (self.getBlock() instanceof PolyBlock block && block.canConnectTexturesToward(world,pos,p,self)));
+        ModelData sourceData=source.getModelData(view,pos,material,ModelData.EMPTY);
         return data.derive().with(MESH,mesh(poly,material,source,sourceData,material.getSeed(pos))).build();
     }
     private Mesh mesh(Polyhedron poly,BlockState material,BakedModel source,ModelData data,long seed) {

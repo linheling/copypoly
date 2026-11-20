@@ -60,6 +60,26 @@ class PolyhedronTest {
             verifyCoverage(h,random);
         }
     }
+    @Test void faceAtBoundaryOnlyReportsSidesTheHullPresents() {
+        for(int axis=0;axis<3;axis++) {
+            assertTrue(Polyhedron.CUBE.faceAtBoundary(axis,true));
+            assertTrue(Polyhedron.CUBE.faceAtBoundary(axis,false));
+        }
+        // Half block spanning x 0..8: only the -X side sits on the block border.
+        var half=hull("0,0,0;0,0,16;0,16,0;0,16,16;8,0,0;8,0,16;8,16,0;8,16,16");
+        assertTrue(half.faceAtBoundary(0,false));
+        assertFalse(half.faceAtBoundary(0,true));
+        assertTrue(half.faceAtBoundary(1,true));
+        assertTrue(half.faceAtBoundary(2,false));
+        // Slanted faces never qualify, even where they touch the border along an edge.
+        var tetra=hull("0,0,0;16,0,0;0,16,0;0,0,16");
+        assertTrue(tetra.faceAtBoundary(0,false));
+        assertTrue(tetra.faceAtBoundary(1,false));
+        assertTrue(tetra.faceAtBoundary(2,false));
+        assertFalse(tetra.faceAtBoundary(0,true));
+        assertFalse(tetra.faceAtBoundary(1,true));
+        assertFalse(tetra.faceAtBoundary(2,true));
+    }
     private static void verifyCoverage(Polyhedron h,Random r) {
         // Positive convex combinations are known interior points, independent of the plane implementation.
         for(int j=0;j<60;j++) {

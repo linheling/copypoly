@@ -22,6 +22,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.*;
 import net.minecraft.world.phys.shapes.*;
 import net.neoforged.neoforge.common.Tags;
+import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class PolyBlock extends CopycatBlock {
@@ -58,8 +59,32 @@ public class PolyBlock extends CopycatBlock {
         return InteractionResult.SUCCESS;
     }
     @Override public BlockEntityType<? extends CopycatBlockEntity> getBlockEntityType() { return Copypoly.ENTITY.get(); }
-    @Override public boolean canConnectTexturesToward(BlockAndTintGetter world, BlockPos from, BlockPos to, BlockState state) { return false; }
-    @Override public boolean isIgnoredConnectivitySide(BlockAndTintGetter w, BlockState s, Direction d, BlockPos a, BlockPos b) { return true; }
+    /** Axis index used by {@link com.caca.copypoly.geometry.Polyhedron} (0=x, 1=y, 2=z). */
+    private static int axis(Direction direction) { return direction.getAxis().ordinal(); }
+    private static boolean boundary(PolyBlockEntity be, Direction side) {
+        return be.poly().faceAtBoundary(axis(side), side.getAxisDirection() == Direction.AxisDirection.POSITIVE);
+    }
+    /**
+     * The material model's connected-texture pass asks this for every neighbour it wants to look at.
+     * Only sides where the hull actually shows a face on the block border count, so a partial hull does
+     * not pick up connections it has no geometry for.
+     */
+    @Override public boolean canConnectTexturesToward(BlockAndTintGetter world, BlockPos from, BlockPos to, BlockState state) {
+        int dx = to.getX() - from.getX(), dy = to.getY() - from.getY(), dz = to.getZ() - from.getZ();
+        if (dx == 0 && dy == 0 && dz == 0) return true; // own position: keeps the block itself visible to the query
+        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) != 1) return false;
+        Direction side = Direction.fromDelta(dx, dy, dz);
+        return side != null && world.getBlockEntity(from) instanceof PolyBlockEntity be && boundary(be, side);
+    }
+    /**
+     * Drives {@link CopycatBlock#getAppearance}: returning {@code false} makes this block report the
+     * copied material instead of itself, which is what lets other connected-texture blocks join up to it.
+     */
+    @Override public boolean isIgnoredConnectivitySide(BlockAndTintGetter world, BlockState state, Direction side, BlockPos from, @Nullable BlockPos to) {
+        if (to == null) return true;
+        if (!(world.getBlockEntity(from) instanceof PolyBlockEntity be) || !boundary(be, side)) return true;
+        return world.getBlockState(to).isAir();
+    }
     @Override protected VoxelShape getShape(BlockState s, BlockGetter w, BlockPos p, CollisionContext c) {
         return w.getBlockEntity(p) instanceof PolyBlockEntity be ? be.shape() : Shapes.block();
     }
