@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.decoration.copycat.CopycatModel;
 import com.simibubi.create.content.decoration.copycat.FilteredBlockAndTintGetter;
+import com.simibubi.create.foundation.block.connected.CTModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.*;
@@ -25,6 +26,7 @@ import net.neoforged.neoforge.client.model.BakedModelWrapper;
 import net.neoforged.neoforge.client.model.data.*;
 import net.neoforged.neoforge.common.util.TriState;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Builds immutable mesh snapshots on chunk rebuild; getQuads itself only performs lookups. */
 public class PolyModel extends BakedModelWrapper<BakedModel> {
@@ -48,18 +50,41 @@ public class PolyModel extends BakedModelWrapper<BakedModel> {
             default -> p.z()>0?Direction.SOUTH:Direction.NORTH;
         };
     }
+    private static final Map<Class<?>,Boolean> CONNECTS = new ConcurrentHashMap<>();
+    /**
+     * Whether this material model reacts to its neighbours on its own: Create's {@code CTModel} (covers
+     * connected glass, casings, pillars) plus the third-party connected-texture wrappers that author packs
+     * may stack on top (Fusion's {@code ConnectingBakedModel}, Continuity's {@code CtmBakedModel}).
+     * Anything else ignores the world, so there is nothing to gain from showing it its neighbours.
+     */
+    private static boolean connects(BakedModel model) {
+        return CONNECTS.computeIfAbsent(model.getClass(),type -> {
+            if(model instanceof CTModel) return true;
+            String name=type.getName();
+            return name.endsWith("CTModel") || name.contains("CtmBakedModel") || name.contains("ConnectingBakedModel");
+        });
+    }
     @Override public ModelData getModelData(BlockAndTintGetter world,BlockPos pos,BlockState state,ModelData data) {
         BlockState material=CopycatModel.getMaterial(data);
         Polyhedron poly=data.get(PolyBlockEntity.GEOMETRY);
         if(poly==null) poly=Polyhedron.CUBE;
         BakedModel source=Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
-        // Connected textures: resolve the material model against a view that hides neighbours this hull
-        // has no face towards (see PolyBlock#canConnectTexturesToward). The polyhedron's own position stays
-        // visible so Create's CTModel can apply its CopycatBlock occlusion exemption to thin/slanted shapes.
-        BlockState self=state;
-        FilteredBlockAndTintGetter view=new FilteredBlockAndTintGetter(world,
-            p -> p.equals(pos) || (self.getBlock() instanceof PolyBlock block && block.canConnectTexturesToward(world,pos,p,self)));
-        ModelData sourceData=source.getModelData(view,pos,material,ModelData.EMPTY);
+        // Two routes in one:
+        //  * material model connects (Create CTModel / Fusion / Continuity) -> hand it a view that only
+        //    exposes the sides this hull actually shows a face towards, so the connected tile it picks
+        //    matches the geometry. The UV shift it bakes in is then resampled by position in projectFace.
+        //  * material model is plain -> seal the view to this block, which is the LittleTiles route: no
+        //    neighbour queries, guaranteed plain tiles, texture continuity carried purely by position.
+        ModelData sourceData;
+        if(connects(source)) {
+            BlockState self=state;
+            FilteredBlockAndTintGetter view=new FilteredBlockAndTintGetter(world,
+                p -> p.equals(pos) || (self.getBlock() instanceof PolyBlock block && block.canConnectTexturesToward(world,pos,p,self)));
+            sourceData=source.getModelData(view,pos,material,ModelData.EMPTY);
+        } else {
+            FilteredBlockAndTintGetter sealed=new FilteredBlockAndTintGetter(world,pos::equals);
+            sourceData=source.getModelData(sealed,pos,material,ModelData.EMPTY);
+        }
         return data.derive().with(MESH,mesh(poly,material,source,sourceData,material.getSeed(pos))).build();
     }
     private Mesh mesh(Polyhedron poly,BlockState material,BakedModel source,ModelData data,long seed) {
@@ -147,6 +172,17 @@ public class PolyModel extends BakedModelWrapper<BakedModel> {
         }
         return out;
     }
+    /**
+     * Re-samples the material quad onto one polyhedron face by position (LittleTiles' VectorFan rule,
+     * written for an arbitrary face plane): the polygon vertex is projected into the quad's own (a,b)
+     * plane, the offset from the quad's first vertex is turned into a UV offset with the quad's own UV
+     * density (s/tv below), and the polygon is clamped to the quad's bounds first.
+     * <p>
+     * For a full-block face this degenerates to "sample the texture where this piece of geometry sits",
+     * which is what keeps a wall of polyhedra and the real blocks next to it seamless; for inset models
+     * (panes, torches) the clamp keeps the texture at its true density instead of stretching it.
+     * No connected-tile data is involved: the UVs describe position, not a connection state.
+     */
     private static void projectFace(List<BakedQuad> output,Polyhedron.Face face,BakedQuad source,Direction dir) {
         int[] src=source.getVertices();int stride=src.length/4;
         Vec3 p0=vertex(src,stride,0),p1=vertex(src,stride,1),p3=vertex(src,stride,3);
