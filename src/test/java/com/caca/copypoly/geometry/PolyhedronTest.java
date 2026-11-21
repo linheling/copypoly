@@ -60,6 +60,28 @@ class PolyhedronTest {
             verifyCoverage(h,random);
         }
     }
+    @Test void presentsAcceptsSlantedSurfacesThatStillReachTheBorder() {
+        for(int axis=0;axis<3;axis++) {
+            assertTrue(Polyhedron.CUBE.presents(axis,true));
+            assertTrue(Polyhedron.CUBE.presents(axis,false));
+        }
+        // Triangular prism (triangle 0,0 / 16,0 / 0,16 extruded along Z): the top surface is the slanted
+        // plane x+y=16, so it is NOT a boundary face, yet the material is clearly visible from above.
+        var prism=hull("0,0,0;16,0,0;0,16,0;0,0,16;16,0,16;0,16,16");
+        assertTrue(prism.presents(1,true));
+        assertFalse(prism.faceAtBoundary(1,true));
+        assertTrue(prism.presents(1,false));
+        assertTrue(prism.presents(0,false));
+        // The slant reaches x = 16 along the bottom edge, so the material is visible from +X as well; the
+        // strict probe gate is what keeps that from inventing a connection across X.
+        assertTrue(prism.presents(0,true));
+        assertFalse(prism.faceAtBoundary(0,true));
+        assertFalse(prism.showsOffset(1,0,0));
+        // A hull that stops short of the border presents nothing on that side.
+        var inset=hull("0,0,0;0,0,16;0,16,0;0,16,16;12,0,0;12,0,16;12,16,0;12,16,16");
+        assertFalse(inset.presents(0,true));
+        assertTrue(inset.presents(0,false));
+    }
     @Test void showsOffsetAllowsCornersOnlyWhereTheHullFillsTheBorder() {
         assertTrue(Polyhedron.CUBE.showsOffset(0,0,0));
         assertTrue(Polyhedron.CUBE.showsOffset(1,0,0));

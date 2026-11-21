@@ -125,6 +125,29 @@ public final class Polyhedron {
         if(dz!=0 && !faceAtBoundary(2,dz>0)) return false;
         return true;
     }
+    /**
+     * Whether the hull presents a surface toward this side of the block, and actually reaches that side.
+     * This is the appearance test for the copied material: a slanted face still counts as "the material is
+     * visible from above" as long as the hull touches y = 16 somewhere, which is what lets edited shapes
+     * (triangular prisms, ramps, clipped corners) join connected textures across a block border. Unlike
+     * {@link #faceAtBoundary} the face does not have to be parallel to the block side, and unlike a bare
+     * "some face looks that way" test a hull that stops short of the border does not claim anything.
+     */
+    public boolean presents(int axis,boolean positive) {
+        boolean facing=false;
+        int reach=positive ? -16 : 32;
+        for(Face face:faces) {
+            if(face.vertices()==null || face.vertices().isEmpty()) continue;
+            Plane normal=face.plane();
+            int component=axis==0 ? normal.x() : axis==1 ? normal.y() : normal.z();
+            if(positive ? component>0 : component<0) facing=true;
+            for(Point vertex:face.vertices()) {
+                int coordinate=axis==0 ? vertex.x() : axis==1 ? vertex.y() : vertex.z();
+                reach=positive ? Math.max(reach,coordinate) : Math.min(reach,coordinate);
+            }
+        }
+        return facing && reach==(positive ? 16 : 0);
+    }
     private static int u(Point p,int axis) { return axis==0 ? p.z : p.x; }
     private static int v(Point p,int axis) { return axis==1 ? p.z : p.y; }
     private static long cross(Point a,Point b,Point c,int axis) {

@@ -61,9 +61,6 @@ public class PolyBlock extends CopycatBlock {
     @Override public BlockEntityType<? extends CopycatBlockEntity> getBlockEntityType() { return Copypoly.ENTITY.get(); }
     /** Axis index used by {@link com.caca.copypoly.geometry.Polyhedron} (0=x, 1=y, 2=z). */
     private static int axis(Direction direction) { return direction.getAxis().ordinal(); }
-    private static boolean boundary(PolyBlockEntity be, Direction side) {
-        return be.poly().faceAtBoundary(axis(side), side.getAxisDirection() == Direction.AxisDirection.POSITIVE);
-    }
     /**
      * The material model's connected-texture pass asks this for every position it wants to look at.
      * Only sides where the hull actually shows a face on the block border count, so a partial hull does
@@ -77,10 +74,15 @@ public class PolyBlock extends CopycatBlock {
     /**
      * Drives {@link CopycatBlock#getAppearance}: returning {@code false} makes this block report the
      * copied material instead of itself, which is what lets other connected-texture blocks join up to it.
+     * The gate is {@code presents}, not {@code faceAtBoundary}: an edited hull (triangular prism, ramp,
+     * clipped corner) shows the material through a slanted face, so requiring a face parallel to the block
+     * side would make two neighbouring polyhedra of the same material stop seeing each other - in game each
+     * block keeps its own frame on the shared face.
      */
     @Override public boolean isIgnoredConnectivitySide(BlockAndTintGetter world, BlockState state, Direction side, BlockPos from, @Nullable BlockPos to) {
         if (to == null) return true;
-        if (!(world.getBlockEntity(from) instanceof PolyBlockEntity be) || !boundary(be, side)) return true;
+        if (!(world.getBlockEntity(from) instanceof PolyBlockEntity be)) return true;
+        if (!be.poly().presents(axis(side), side.getAxisDirection() == Direction.AxisDirection.POSITIVE)) return true;
         return world.getBlockState(to).isAir();
     }
     @Override protected VoxelShape getShape(BlockState s, BlockGetter w, BlockPos p, CollisionContext c) {
